@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="本地运行的高中英语 AI 训练场：按自定义词汇与语法范围生成练习、作文 AI 批改、错题本，API Key 只保存在本机。" />
+  <meta name="color-scheme" content="light" />
+  <title>高中英语 AI 训练场</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">📚 高中英语 AI 训练场</span>
+    <span id="mode-pill" class="pill">未配置</span>
+    <nav class="nav">
+      <button class="nav-btn active" data-view="generate">AI 出题</button>
+      <button class="nav-btn" data-view="practice">开始练习</button>
+      <button class="nav-btn" data-view="essay">写作批改</button>
+      <button class="nav-btn" data-view="wrong">错题本<span id="wrong-count" class="badge hidden">0</span></button>
+      <button class="nav-btn" data-view="settings">设置</button>
+    </nav>
+  </header>
+
+  <div id="proxy-banner" class="banner warn hidden">
+    未检测到本地代理（server.mjs）。若直连 AI 接口被 CORS 拦截，请运行 <b>node english-trainer/server.mjs</b> 后刷新；或在设置中关闭「使用本地代理」。
+  </div>
+
+  <main>
+    <!-- ================= AI 出题 ================= -->
+    <section id="view-generate" class="view card">
+      <h2>AI 出题 · 自定义范围</h2>
+      <form id="gen-form" class="form-grid">
+        <label>题型与题数（每种 0–10 题）
+          <div id="type-chips" class="chips"></div>
+          <div id="count-box" class="row" style="margin-top:8px"></div>
+        </label>
+        <label>重点单词 / 词组（逗号或空格分隔，可留空）
+          <input id="gen-words" type="text" placeholder="例如: abandon, destination, look forward to" />
+        </label>
+        <label>语法范围（勾选考点，可多选）
+          <div id="grammar-chips" class="chips"></div>
+        </label>
+        <label>语篇主题（用于阅读理解 / 完形语境，可留空）
+          <input id="gen-topic" type="text" placeholder="例如: 中国传统文化 / 科技与环境" />
+        </label>
+        <label class="checkbox"><input id="gen-web" type="checkbox" checked /> 联网抓取参考资料（维基百科语篇 / 高考词库 / 例句）</label>
+        <div class="row">
+          <button id="gen-submit" type="submit" class="btn primary">开始出题</button>
+          <span class="muted">生成后到顶部「开始练习」作答</span>
+        </div>
+        <p id="gen-status" class="status"></p>
+      </form>
+      <h3>本次参考资料</h3>
+      <div id="gen-materials" class="materials"><div class="empty">尚无</div></div>
+    </section>
+
+    <!-- ================= 开始练习 ================= -->
+    <section id="view-practice" class="view hidden">
+      <div id="practice-head" class="practice-head"></div>
+      <div id="question-list" style="display:grid;gap:14px"></div>
+      <p class="foot">答题后点击「交卷判分」，错题自动进入错题本。</p>
+    </section>
+
+    <!-- ================= 写作批改 ================= -->
+    <section id="view-essay" class="view hidden" style="display:grid;gap:18px">
+      <section class="card">
+        <h2>AI 作文 · 自定义题目</h2>
+        <form id="essay-gen-form" class="form-grid">
+          <div class="row">
+            <label style="flex:1;min-width:160px">体裁
+              <select id="essay-genre">
+                <option value="应用文">应用文（书信/通知，满分 15）</option>
+                <option value="议论文">议论文（满分 25）</option>
+                <option value="读后续写">读后续写（满分 25）</option>
+                <option value="概要写作">概要写作（满分 25）</option>
+              </select>
+            </label>
+            <label style="flex:2;min-width:220px">话题（可留空）
+              <input id="essay-topic" type="text" placeholder="例如: 是否应该中学生带手机上学" />
+            </label>
+          </div>
+          <label>希望用上的单词 / 短语（可留空）
+            <input id="essay-words-input" type="text" placeholder="例如: benefit, concentrate on" />
+          </label>
+          <div class="row"><button id="essay-gen-submit" type="submit" class="btn primary">生成作文题</button></div>
+        </form>
+      </section>
+
+      <section id="essay-prompt-box" class="card hidden"></section>
+
+      <section class="card">
+        <h2>我的作文</h2>
+        <form id="essay-form" class="form-grid">
+          <textarea id="essay-text" class="text-area" rows="10" placeholder="在此输入你的英语作文…"></textarea>
+          <div class="row">
+            <button id="essay-submit" type="submit" class="btn primary">提交批改</button>
+            <span id="essay-words" class="word-count">已写 0 词</span>
+          </div>
+        </form>
+        <p id="essay-status" class="status"></p>
+      </section>
+
+      <section id="essay-feedback" class="card hidden"></section>
+
+      <section class="card">
+        <h2>作文历史</h2>
+        <div id="essay-history" style="display:grid;gap:8px"><div class="empty">暂无</div></div>
+      </section>
+    </section>
+
+    <!-- ================= 错题本 ================= -->
+    <section id="view-wrong" class="view hidden card">
+      <h2>错题本</h2>
+      <div class="row" style="margin-bottom:12px">
+        <button id="wrong-retry" class="btn primary">重练这些错题</button>
+        <button id="wrong-clear" class="btn danger">清空错题本</button>
+      </div>
+      <div id="wrong-list" style="display:grid;gap:10px"></div>
+    </section>
+
+    <!-- ================= 设置 ================= -->
+    <section id="view-settings" class="view hidden card">
+      <h2>设置 · AI 接入</h2>
+      <form id="settings-form" class="form-grid">
+        <label>服务商预设（只帮你填接口地址，模型点下面「拉取可用模型」从接口获取）
+          <select id="provider-preset">
+            <option value="">— 自定义：请手动填写下方 API Base —</option>
+          </select>
+        </label>
+        <label>API Base（OpenAI 兼容接口均可：DeepSeek / 通义 / Kimi / 中转站…）
+          <input id="api-base" type="text" placeholder="https://api.openai.com/v1" />
+        </label>
+        <label>API Key（只保存在本机浏览器）
+          <input id="api-key" type="password" placeholder="sk-..." />
+        </label>
+        <label>模型名（点「拉取可用模型」从接口获取当前可用列表，也可手动输入）
+          <input id="model" type="text" list="model-options" placeholder="先拉取，或手动输入模型名" />
+          <datalist id="model-options"></datalist>
+        </label>
+        <div class="model-picker">
+          <div class="row">
+            <button id="fetch-models" type="button" class="btn small">拉取可用模型</button>
+            <span id="model-source" class="muted tip">尚未拉取</span>
+          </div>
+          <div id="model-filter-row" class="hidden" style="margin-top:8px">
+            <input id="model-filter" type="text" placeholder="筛选模型名，例如 qwen / deepseek / gpt" />
+          </div>
+          <div id="model-chips" class="chips" style="margin-top:8px"></div>
+        </div>
+        <label class="checkbox"><input id="use-proxy" type="checkbox" checked /> 使用本地代理转发（推荐，避免浏览器 CORS）</label>
+        <label class="checkbox"><input id="demo-mode" type="checkbox" /> 演示模式（不调用 AI，用内置示例题体验完整流程）</label>
+        <div class="row">
+          <button type="submit" class="btn primary">保存设置</button>
+          <button id="test-conn" type="button" class="btn">测试连接</button>
+        </div>
+        <p id="settings-status" class="status"></p>
+        <details>
+          <summary>说明</summary>
+          <div>Key 仅存于浏览器 localStorage，请求经本机 server.mjs（127.0.0.1）转发，不经过任何第三方。</div>
+        </details>
+      </form>
+    </section>
+  </main>
+
+  <footer class="foot">
+    数据（错题本 / 作文历史 / 设置）保存在本机浏览器 · 素材来源：
+    <a href="https://www.wikipedia.org/" target="_blank" rel="noopener">Wikipedia</a>（CC BY-SA）、
+    <a href="https://tatoeba.org/" target="_blank" rel="noopener">Tatoeba</a>（CC BY）、
+    <a href="https://github.com/mahavivo/english-wordlists" target="_blank" rel="noopener">mahavivo/english-wordlists</a>
+  </footer>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

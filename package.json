@@ -1,0 +1,14 @@
+{
+  "name": "english-trainer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "高中英语 AI 训练场：零依赖本地服务 + 纯前端，AI 出题 / 作文批改 / 错题本",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
